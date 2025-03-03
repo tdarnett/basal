@@ -1,103 +1,67 @@
 # Basal Tracker
 
-A simple command-line tool for tracking insulin basal rates over time. Built with Go, it helps you maintain a history of your basal rate adjustments and analyze changes.
+A simple command-line tool for tracking insulin basal rates over time. Store your basal rate history, view changes with graphs, and find information using natural language queries. All data stays on your local machine.
 
 ## Features
 
-- Track daily basal rate schedules
-- View historical basal rate changes
-- Calculate daily insulin totals
-- Simple SQLite storage
-- Easy-to-use command-line interface
+## Key Features
 
-## Installation
+- **Comprehensive Tracking**: Record and manage daily basal rate schedules
+- **Natural Language Queries**: Ask questions about your data in plain English
+- **Historical Analysis**: View and compare basal rate changes over time
+- **Insulin Calculations**: Automatically calculate daily insulin totals
+- **User-Friendly Interface**: Intuitive command-line experience with interactive prompts
+- **Privacy-Focused**: All your health data stays local on your machine
 
-Build and install:
+## Quick Start
+
+### Installation
+
 ```bash
 go install
 ```
 
-## Usage
-
-### Add Basal Rates
-
-Add a new basal rate record interactively:
+### Basic Commands
 
 ```bash
-basal add
+basal add    # Add a new basal rate record
+basal list   # View all records
+basal show   # Display rates for a specific date
+basal ask    # Query your data using natural language
+basal help   # Display help information
 ```
 
-This will prompt you for:
-- Date (defaults to today)
-- Time intervals (supports HH:MM, H:MM, or HHMM formats)
-- Units per hour for each interval
+## Detailed Usage
 
-Note: Intervals must be continuous (end time of one interval is start time of next) and cover the full 24 hours (00:00 to 00:00).
 
-### List Records
-
-View all basal rate records:
-
-```bash
-basal list
-```
-
-### Show Basal Rates
-
-View basal rates for a specific date:
+Get detailed historical information for a specific date:
 
 ```bash
 basal show 2025-03-01
 ```
 
-If no exact record exists for the date, it will show the closest previous record.
+### AI-Powered Natural Language Queries
 
-### Delete Records
-
-Delete a basal rate record by its ID:
+Ask questions about your basal rates in plain English:
 
 ```bash
-basal delete 123
-```
-
-### Natural Language Queries
-
-Ask questions about your basal rates using natural language:
-
-```bash
-basal ask "what was my basal rate on Dec 2, 2023?"
+basal ask "what was my total daily basal insulin on December 2, 2023?"
 basal ask "when was I taking the most insulin?"
+basal ask "how have my basal rates changed over the past year?"
+basal ask "what time of day do I typically have my highest basal rate?"
 ```
 
-Note: This requires Ollama to be running locally.
+### Configuration Options
 
-### Configure Database
-
-Set the database location:
+Customize your database location:
 
 ```bash
 basal config db
 ```
 
-### Configure LLM
-
-Configure the LLM settings for natural language queries:
+Configure the LLM settings for natural language processing:
 
 ```bash
 basal config llm
 ```
-
-### Help
-
-Display help information:
-
-```bash
-basal help
-```
-
-## Future Features
-
-- Graph a record in terminal
-- Export/import functionality
-- Statistical analysis of basal patterns
 
