@@ -40,6 +40,9 @@ Get detailed historical information for a specific date:
 basal show 2025-03-01
 ```
 
+![Basal Rate Graph](./static/show.png)
+
+
 ### AI-Powered Natural Language Queries
 
 Ask questions about your basal rates in plain English:
@@ -50,6 +53,8 @@ basal ask "when was I taking the most insulin?"
 basal ask "how have my basal rates changed over the past year?"
 basal ask "what time of day do I typically have my highest basal rate?"
 ```
+
+![AI-Powered Natural Language Queries](./static/ask.png)
 
 ### Configuration Options
 
