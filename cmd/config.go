@@ -32,6 +32,12 @@ var configLLMCmd = &cobra.Command{
 	RunE:  runConfigLLM,
 }
 
+// LLMConfig holds the LLM configuration settings
+type LLMConfig struct {
+	Endpoint string
+	Model    string
+}
+
 func init() {
 	rootCmd.AddCommand(configCmd)
 	configCmd.AddCommand(configDBCmd)
@@ -185,7 +191,7 @@ func runConfigLLM(cmd *cobra.Command, args []string) error {
 	// Get model
 	modelPrompt := promptui.Prompt{
 		Label:   "LLM Model",
-		Default: "mistral",
+		Default: "llama3.2:latest",
 	}
 
 	model, err := modelPrompt.Run()
@@ -228,4 +234,44 @@ func copyFile(src, dst string) error {
 
 	// Write to destination
 	return os.WriteFile(dst, content, 0644)
+}
+
+// getLLMConfig reads the LLM configuration from the config file
+func getLLMConfig() (*LLMConfig, error) {
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return nil, fmt.Errorf("getting config directory: %w", err)
+	}
+
+	configFile := filepath.Join(configDir, "basal", "llm_config")
+	content, err := os.ReadFile(configFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Return default config if file doesn't exist
+			return &LLMConfig{
+				Endpoint: "http://localhost:11434",
+				Model:    "llama3.2:latest",
+			}, nil
+		}
+		return nil, fmt.Errorf("reading config file: %w", err)
+	}
+
+	config := &LLMConfig{}
+	lines := strings.Split(string(content), "\n")
+	for _, line := range lines {
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+		switch key {
+		case "endpoint":
+			config.Endpoint = value
+		case "model":
+			config.Model = value
+		}
+	}
+
+	return config, nil
 }

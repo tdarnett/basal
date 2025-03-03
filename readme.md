@@ -1,18 +1,14 @@
-# Basal - Insulin Basal Rate Tracker
+# Basal Tracker
 
-A command-line tool for tracking insulin basal rates over time. The application stores data in a SQLite database.
+A simple command-line tool for tracking insulin basal rates over time. Built with Go, it helps you maintain a history of your basal rate adjustments and analyze changes.
 
 ## Features
 
-- Interactive basal rate updates with time intervals
-- Query basal rates by date
-- Natural language queries using local LLM (Ollama)
-- Simple command-line interface
-
-## Prerequisites
-
-- Go 1.21 or later
-- Ollama (for natural language queries)
+- Track daily basal rate schedules
+- View historical basal rate changes
+- Calculate daily insulin totals
+- Simple SQLite storage
+- Easy-to-use command-line interface
 
 ## Installation
 
@@ -23,46 +19,72 @@ go install
 
 ## Usage
 
-### Update Basal Rates
+### Add Basal Rates
 
-Create or update basal rates interactively:
+Add a new basal rate record interactively:
 
 ```bash
-basal update
+basal add
 ```
 
 This will prompt you for:
 - Date (defaults to today)
-- Time intervals (HH:MM format)
+- Time intervals (supports HH:MM, H:MM, or HHMM formats)
 - Units per hour for each interval
 
-### Query by Date
+Note: Intervals must be continuous (end time of one interval is start time of next) and cover the full 24 hours (00:00 to 00:00).
+
+### List Records
+
+View all basal rate records:
+
+```bash
+basal list
+```
+
+### Show Basal Rates
 
 View basal rates for a specific date:
 
 ```bash
-basal date 2025-03-01
+basal show 2025-03-01
 ```
 
 If no exact record exists for the date, it will show the closest previous record.
 
-### Natural Language Queries
+### Delete Records
 
-Query your basal rates using natural language:
+Delete a basal rate record by its ID:
 
 ```bash
-basal query "what was my basal rate on Dec 2, 2023?"
-basal query "when was I taking the most insulin?"
+basal delete 123
+```
+
+### Natural Language Queries
+
+Ask questions about your basal rates using natural language:
+
+```bash
+basal ask "what was my basal rate on Dec 2, 2023?"
+basal ask "when was I taking the most insulin?"
 ```
 
 Note: This requires Ollama to be running locally.
 
-### Configure LLM
+### Configure Database
 
-Configure the LLM endpoint and model for natural language queries:
+Set the database location:
 
 ```bash
-basal llm configure
+basal config db
+```
+
+### Configure LLM
+
+Configure the LLM settings for natural language queries:
+
+```bash
+basal config llm
 ```
 
 ### Help
@@ -73,9 +95,9 @@ Display help information:
 basal help
 ```
 
+## Future Features
 
-
-Future Features:
-
-- graph a record in terminal.
+- Graph a record in terminal
+- Export/import functionality
+- Statistical analysis of basal patterns
 

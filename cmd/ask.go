@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
+	"basal/cmd/ollama"
 	"basal/db"
 
 	"github.com/olekukonko/tablewriter"
@@ -17,90 +19,155 @@ var askCmd = &cobra.Command{
 	Use:   "ask [natural language question]",
 	Short: "Ask questions about your basal rates",
 	Long: `Ask questions about your basal rates in natural language.
-Uses a local LLM via Ollama to convert natural language to SQL queries.`,
+Uses a local LLM via Ollama to convert natural language to SQL queries and interpret results.`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: runAsk,
 }
 
-type BasalOllamaRequest struct {
-	Model    string               `json:"model"`
-	Messages []BasalOllamaMessage `json:"messages"`
+// tableOutputWriter captures table output while also writing to stdout
+type tableOutputWriter struct {
+	output io.Writer
+	buf    strings.Builder
 }
 
-type BasalOllamaMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-}
-
-type BasalOllamaResponse struct {
-	Message BasalOllamaMessage `json:"message"`
+func (w *tableOutputWriter) Write(p []byte) (n int, err error) {
+	w.buf.Write(p)
+	return w.output.Write(p)
 }
 
 func init() {
 	rootCmd.AddCommand(askCmd)
 }
 
+// validateSQLQuery performs basic validation of the SQL query
+func validateSQLQuery(query string) error {
+	query = strings.TrimSpace(strings.ToLower(query))
+	if !strings.HasPrefix(query, "select") {
+		return fmt.Errorf("invalid query: only SELECT queries are allowed")
+	}
+	if strings.Contains(query, "drop") || strings.Contains(query, "delete") || strings.Contains(query, "update") || strings.Contains(query, "insert") {
+		return fmt.Errorf("invalid query: only SELECT queries are allowed")
+	}
+	return nil
+}
+
+// callOllama makes a request to the Ollama API and returns the response
+func callOllama(llmConfig *LLMConfig, prompt string) (string, error) {
+	req := ollama.Request{
+		Model: llmConfig.Model,
+		Messages: []ollama.Message{
+			{
+				Role:    "user",
+				Content: prompt,
+			},
+		},
+		Stream: false,
+	}
+
+	jsonData, err := json.Marshal(req)
+	if err != nil {
+		return "", fmt.Errorf("error marshaling request: %v", err)
+	}
+
+	apiURL := fmt.Sprintf("%s/api/chat", llmConfig.Endpoint)
+	resp, err := http.Post(apiURL, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return "", fmt.Errorf("error calling Ollama API: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var ollamaResp ollama.Response
+	if err := json.NewDecoder(resp.Body).Decode(&ollamaResp); err != nil {
+		return "", fmt.Errorf("error decoding response: %v", err)
+	}
+
+	return ollamaResp.Message.Content, nil
+}
+
+// getLLMInterpretation asks the LLM to interpret the query results
+func getLLMInterpretation(llmConfig *LLMConfig, originalQuestion string, tableOutput string) (string, error) {
+	prompt := fmt.Sprintf(`You are a helpful assistant that interprets SQL query results in natural language.
+The user asked: %s
+
+Here are the query results:
+%s
+
+Please provide a clear, concise answer to the user's question based on these results.
+Keep your response brief and focused on answering the specific question asked.`, originalQuestion, tableOutput)
+
+	return callOllama(llmConfig, prompt)
+}
+
+// renderTable creates and renders a table with the given columns and rows
+func renderTable(writer io.Writer, columns []string, rows [][]string) {
+	table := tablewriter.NewWriter(writer)
+	table.SetHeader(columns)
+	table.SetBorder(false)
+	table.SetColumnSeparator("  ")
+
+	for _, row := range rows {
+		table.Append(row)
+	}
+
+	table.Render()
+}
+
 func runAsk(cmd *cobra.Command, args []string) error {
 	query := strings.Join(args, " ")
 
-	// Get database schema
-	schema := `
-	CREATE TABLE basal_records (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		date DATE NOT NULL,
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-	);
+	// Get LLM configuration
+	llmConfig, err := getLLMConfig()
+	if err != nil {
+		return fmt.Errorf("error getting LLM configuration: %v", err)
+	}
 
-	CREATE TABLE basal_intervals (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		basal_record_id INTEGER,
-		start_time TEXT NOT NULL,
-		end_time TEXT NOT NULL,
-		units_per_hour REAL NOT NULL,
-		FOREIGN KEY (basal_record_id) REFERENCES basal_records(id)
-	);`
+	// Get database schema
+	schema := db.GetSchema()
 
 	prompt := fmt.Sprintf(`You are an SQL expert. Convert the following natural language question into a SQL query that will work with SQLite.
 Here's the database schema:
 %s
 
 The query should return meaningful information about basal rates based on the user's question.
-Include appropriate JOINs between tables and format dates properly.
-Only return the SQL query without any explanation.
+Keep queries as simple as possible - don't add unnecessary complexity.
+
+IMPORTANT:
+1. Return ONLY the SQL query, no explanations or markdown formatting
+2. Start with SELECT
+3. Use SQLite-specific syntax:
+   - Use strftime('%Y-%m-%d', date) for date formatting
+   - Use time('now') instead of now() for current time
+   - Use date('now') instead of now() for current date
+   - Use proper time format (HH:MM) for time comparisons
+   - Use proper date format (YYYY-MM-DD) for date comparisons
+
+Examples:
+- For "which day has the greatest total_units": 
+  SELECT date, total_units FROM basal_records ORDER BY total_units DESC LIMIT 1
+- For "what was my basal rate on Dec 2, 2023":
+  SELECT * FROM basal_records WHERE date = '2023-12-02'
 
 Natural language question: %s`, schema, query)
 
-	// Call Ollama API
-	ollamaReq := BasalOllamaRequest{
-		Model: "mistral",
-		Messages: []BasalOllamaMessage{
-			{
-				Role:    "user",
-				Content: prompt,
-			},
-		},
-	}
-
-	jsonData, err := json.Marshal(ollamaReq)
+	sqlQuery, err := callOllama(llmConfig, prompt)
 	if err != nil {
-		return fmt.Errorf("error marshaling request: %v", err)
+		return err
 	}
 
-	resp, err := http.Post("http://localhost:11434/api/chat", "application/json", bytes.NewBuffer(jsonData))
-	if err != nil {
-		return fmt.Errorf("error calling Ollama API: %v", err)
-	}
-	defer resp.Body.Close()
+	sqlQuery = strings.TrimSpace(sqlQuery)
+	fmt.Printf("\nGenerated SQL query:\n%s\n\n", sqlQuery)
 
-	var ollamaResp BasalOllamaResponse
-	if err := json.NewDecoder(resp.Body).Decode(&ollamaResp); err != nil {
-		return fmt.Errorf("error decoding response: %v", err)
+	// Validate SQL query before database operations
+	if err := validateSQLQuery(sqlQuery); err != nil {
+		return err
 	}
-
-	sqlQuery := strings.TrimSpace(ollamaResp.Message.Content)
 
 	// Execute the SQL query
-	database, err := db.InitDB(getDBPath())
+	dbPath, err := getDBPath()
+	if err != nil {
+		return fmt.Errorf("error getting database path: %v", err)
+	}
+	database, err := db.InitDB(dbPath)
 	if err != nil {
 		return fmt.Errorf("error initializing database: %v", err)
 	}
@@ -108,7 +175,7 @@ Natural language question: %s`, schema, query)
 
 	rows, err := database.Query(sqlQuery)
 	if err != nil {
-		return fmt.Errorf("error executing query: %v", err)
+		return fmt.Errorf("error executing query: %v\nQuery: %s", err, sqlQuery)
 	}
 	defer rows.Close()
 
@@ -118,11 +185,10 @@ Natural language question: %s`, schema, query)
 		return fmt.Errorf("error getting columns: %v", err)
 	}
 
-	// Create table
-	table := tablewriter.NewWriter(cmd.OutOrStdout())
-	table.SetHeader(columns)
-	table.SetBorder(false)
-	table.SetColumnSeparator("  ")
+	// Create a custom writer to capture table output
+	outputWriter := &tableOutputWriter{
+		output: cmd.OutOrStdout(),
+	}
 
 	// Prepare values holder
 	values := make([]interface{}, len(columns))
@@ -131,7 +197,8 @@ Natural language question: %s`, schema, query)
 		valuePtrs[i] = &values[i]
 	}
 
-	// Add rows
+	// Collect all rows
+	var tableRows [][]string
 	for rows.Next() {
 		err := rows.Scan(valuePtrs...)
 		if err != nil {
@@ -153,14 +220,22 @@ Natural language question: %s`, schema, query)
 			}
 		}
 
-		table.Append(stringValues)
+		tableRows = append(tableRows, stringValues)
 	}
 
 	if err = rows.Err(); err != nil {
 		return fmt.Errorf("error iterating rows: %v", err)
 	}
 
-	// Print table
-	table.Render()
+	// Render the table
+	renderTable(outputWriter, columns, tableRows)
+
+	// Get LLM interpretation of the results
+	interpretation, err := getLLMInterpretation(llmConfig, query, outputWriter.buf.String())
+	if err != nil {
+		return fmt.Errorf("error getting interpretation: %v", err)
+	}
+
+	fmt.Printf("\nAnswer: %s\n", interpretation)
 	return nil
 }

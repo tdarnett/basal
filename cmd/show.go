@@ -25,12 +25,23 @@ func init() {
 }
 
 func runShow(cmd *cobra.Command, args []string) error {
-	date, err := time.Parse("2006-01-02", args[0])
-	if err != nil {
-		return fmt.Errorf("invalid date format. Please use YYYY-MM-DD")
+	var date time.Time
+	var err error
+
+	if len(args) > 0 {
+		date, err = time.Parse("2006-01-02", args[0])
+		if err != nil {
+			return fmt.Errorf("invalid date format: %v", err)
+		}
+	} else {
+		date = time.Now()
 	}
 
-	database, err := db.InitDB(getDBPath())
+	dbPath, err := getDBPath()
+	if err != nil {
+		return fmt.Errorf("error getting database path: %v", err)
+	}
+	database, err := db.InitDB(dbPath)
 	if err != nil {
 		return fmt.Errorf("error initializing database: %v", err)
 	}
@@ -65,9 +76,8 @@ func runShow(cmd *cobra.Command, args []string) error {
 	// Print table
 	table.Render()
 
-	// Calculate and print daily total
-	dailyTotal := db.CalculateDailyBasal(intervals)
-	fmt.Printf("\nDaily basal: %.2f units\n", dailyTotal)
+	// Print daily total from stored value
+	fmt.Printf("\nDaily basal: %.2f units\n", record.TotalUnits)
 
 	return nil
 }

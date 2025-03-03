@@ -20,7 +20,11 @@ func init() {
 }
 
 func runList(cmd *cobra.Command, args []string) error {
-	database, err := db.InitDB(getDBPath())
+	dbPath, err := getDBPath()
+	if err != nil {
+		return fmt.Errorf("error getting database path: %v", err)
+	}
+	database, err := db.InitDB(dbPath)
 	if err != nil {
 		return fmt.Errorf("error initializing database: %v", err)
 	}

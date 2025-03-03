@@ -24,7 +24,11 @@ func init() {
 }
 
 func runAdd(cmd *cobra.Command, args []string) error {
-	database, err := db.InitDB(getDBPath())
+	dbPath, err := getDBPath()
+	if err != nil {
+		return fmt.Errorf("error getting database path: %v", err)
+	}
+	database, err := db.InitDB(dbPath)
 	if err != nil {
 		return fmt.Errorf("error initializing database: %v", err)
 	}
@@ -61,18 +65,22 @@ func runAdd(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	fmt.Println("\nEnter basal rate intervals for the entire day (00:00 to 00:00)")
+	fmt.Println("Each interval must start where the previous one ended.")
+	fmt.Println("The last interval must end at 00:00 to complete the day.")
+
 	var intervals []db.BasalInterval
 	for {
 		// Get start time
 		startPrompt := promptui.Prompt{
-			Label: "Start time (HH:MM, H:MM, or HHMM format, empty to finish)",
+			Label: "Start time (HH:MM, H:MM, or HHMM format)",
 			Validate: func(input string) error {
-				if input == "" {
-					return nil
-				}
 				normalized, err := parseTimeFormat(input)
 				if err != nil {
 					return err
+				}
+				if len(intervals) == 0 && normalized != "00:00" {
+					return fmt.Errorf("first interval must start at 00:00")
 				}
 				if len(intervals) > 0 {
 					lastInterval := intervals[len(intervals)-1]
@@ -89,10 +97,6 @@ func runAdd(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("start time prompt failed: %v", err)
 		}
 
-		if startTime == "" {
-			break
-		}
-
 		startTime, err = parseTimeFormat(startTime)
 		if err != nil {
 			return fmt.Errorf("invalid start time: %v", err)
@@ -105,11 +109,6 @@ func runAdd(cmd *cobra.Command, args []string) error {
 				normalized, err := parseTimeFormat(input)
 				if err != nil {
 					return err
-				}
-
-				// Allow 00:00 as a valid end time
-				if normalized == "00:00" {
-					return nil
 				}
 
 				// For other times, ensure end time is after start time
@@ -158,18 +157,33 @@ func runAdd(cmd *cobra.Command, args []string) error {
 			EndTime:      endTime,
 			UnitsPerHour: units,
 		})
+
+		// If we've completed the day (ended at 00:00), break
+		if endTime == "00:00" {
+			break
+		}
 	}
 
-	if len(intervals) == 0 {
-		return fmt.Errorf("no intervals provided")
+	// Calculate daily total
+	dailyTotal := db.CalculateDailyBasal(intervals)
+
+	// Show summary and get confirmation
+	fmt.Printf("\nDaily Summary for %s:\n", date.Format("2006-01-02"))
+	fmt.Println("Time Interval    Units/hr")
+	fmt.Println("------------------------")
+	for _, interval := range intervals {
+		fmt.Printf("%s - %s    %.2f\n", interval.StartTime, interval.EndTime, interval.UnitsPerHour)
+	}
+	fmt.Printf("\nTotal daily basal: %.2f units\n", dailyTotal)
+
+	confirmPrompt := promptui.Prompt{
+		Label:     "Save this record",
+		IsConfirm: true,
 	}
 
-	// Validate complete coverage of 24 hours
-	if intervals[0].StartTime != "00:00" {
-		return fmt.Errorf("first interval must start at 00:00")
-	}
-	if intervals[len(intervals)-1].EndTime != "00:00" {
-		return fmt.Errorf("last interval must end at 00:00")
+	if _, err := confirmPrompt.Run(); err != nil {
+		fmt.Println("Record not saved.")
+		return nil
 	}
 
 	// Create the record
