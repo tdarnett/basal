@@ -44,7 +44,7 @@ func runList(cmd *cobra.Command, args []string) error {
 	fmt.Println("ID        Date")
 	fmt.Println("------------------")
 	for _, record := range records {
-		fmt.Printf("%-8d  %s\n", record.ID, record.Date.Format("2006-01-02"))
+		fmt.Printf("%-8d  %s\n", record.ID, record.Date.Format(db.DateFormat))
 	}
 	return nil
 }

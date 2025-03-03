@@ -11,6 +11,8 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+const DateFormat = "2006-01-02"
+
 // BasalRecord represents a daily basal insulin rate record.
 type BasalRecord struct {
 	ID         int64
@@ -58,7 +60,7 @@ func CreateBasalRecord(db *sql.DB, date time.Time, intervals []BasalInterval) er
 
 	result, err := tx.Exec(
 		"INSERT INTO basal_records (date, total_units) VALUES (?, ?)",
-		date.Format("2006-01-02"),
+		date.Format(DateFormat),
 		totalUnits,
 	)
 	if err != nil {
@@ -108,7 +110,7 @@ func GetBasalRecordByDate(db *sql.DB, date time.Time) (*BasalRecord, []BasalInte
 	WHERE date(br.date) = date(?)
 	ORDER BY bi.start_time`
 
-	rows, err := db.Query(query, date.Format("2006-01-02"))
+	rows, err := db.Query(query, date.Format(DateFormat))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -125,7 +127,7 @@ func GetBasalRecordByDate(db *sql.DB, date time.Time) (*BasalRecord, []BasalInte
 
 		var recordID int64
 		var dateStr string
-		err = db.QueryRow(idQuery, date.Format("2006-01-02")).Scan(&recordID, &dateStr)
+		err = db.QueryRow(idQuery, date.Format(DateFormat)).Scan(&recordID, &dateStr)
 		if err != nil {
 			if err == sql.ErrNoRows {
 				// If no previous record, get the earliest record's ID
@@ -185,7 +187,7 @@ func GetBasalRecordByDate(db *sql.DB, date time.Time) (*BasalRecord, []BasalInte
 			return nil, nil, err
 		}
 
-		record.Date, err = time.Parse("2006-01-02", dateStr)
+		record.Date, err = time.Parse(DateFormat, dateStr)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -220,7 +222,7 @@ func ListBasalRecords(db *sql.DB) ([]BasalRecord, error) {
 			return nil, err
 		}
 
-		record.Date, err = time.Parse("2006-01-02", dateStr)
+		record.Date, err = time.Parse(DateFormat, dateStr)
 		if err != nil {
 			return nil, err
 		}

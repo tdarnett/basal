@@ -35,22 +35,19 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	defer database.Close()
 
 	// Get date
-	datePrompt := promptui.Prompt{
-		Label:   "Date (YYYY-MM-DD, press enter for today)",
-		Default: time.Now().Format("2006-01-02"),
+	prompt := promptui.Prompt{
+		Label:   "Date (YYYY-MM-DD), press enter for today",
+		Default: time.Now().Format(db.DateFormat),
 		Validate: func(input string) error {
-			if input == "" {
-				return nil
-			}
-			_, err := time.Parse("2006-01-02", input)
+			_, err := time.Parse(db.DateFormat, input)
 			if err != nil {
-				return fmt.Errorf("invalid date format")
+				return fmt.Errorf("invalid date format: %v", err)
 			}
 			return nil
 		},
 	}
 
-	dateStr, err := datePrompt.Run()
+	dateStr, err := prompt.Run()
 	if err != nil {
 		return fmt.Errorf("date prompt failed: %v", err)
 	}
@@ -59,7 +56,7 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	if dateStr == "" {
 		date = time.Now()
 	} else {
-		date, err = time.Parse("2006-01-02", dateStr)
+		date, err = time.Parse(db.DateFormat, dateStr)
 		if err != nil {
 			return fmt.Errorf("invalid date: %v", err)
 		}
@@ -168,7 +165,7 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	dailyTotal := db.CalculateDailyBasal(intervals)
 
 	// Show summary and get confirmation
-	fmt.Printf("\nDaily Summary for %s:\n", date.Format("2006-01-02"))
+	fmt.Printf("\nDaily Summary for %s:\n", date.Format(db.DateFormat))
 	fmt.Println("Time Interval    Units/hr")
 	fmt.Println("------------------------")
 	for _, interval := range intervals {
