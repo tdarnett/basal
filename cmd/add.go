@@ -69,8 +69,14 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	var intervals []db.BasalInterval
 	for {
 		// Get start time
+		startTimeDefault := "00:00"
+		if len(intervals) > 0 {
+			startTimeDefault = intervals[len(intervals)-1].EndTime
+		}
+
 		startPrompt := promptui.Prompt{
-			Label: "Start time (HH:MM, H:MM, or HHMM format)",
+			Label:   "Start time (HH:MM, H:MM, or HHMM format)",
+			Default: startTimeDefault,
 			Validate: func(input string) error {
 				normalized, err := parseTimeFormat(input)
 				if err != nil {
@@ -106,6 +112,11 @@ func runAdd(cmd *cobra.Command, args []string) error {
 				normalized, err := parseTimeFormat(input)
 				if err != nil {
 					return err
+				}
+
+				// Special case: Allow "00:00" as end time (represents midnight at end of day)
+				if normalized == "00:00" {
+					return nil
 				}
 
 				// For other times, ensure end time is after start time
